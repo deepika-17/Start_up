@@ -1,55 +1,47 @@
 import os
 import sys
-from dataclasses import dataclass
-
 import numpy as np
 import pandas as pd
+from dataclasses import dataclass
 from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.preprocessing import LabelEncoder
+from sklearn.compose import ColumnTransformer
 
 from src.exception import CustomException
 from src.logger import logging
 from src.utils import save_object
 
-
 @dataclass
 class DataTransformationConfig:
-    preprocessor_obj_file_path: str = os.path.join('artifacts', "preprocessor.pkl")
-
+    preprocessor_obj_file_path: str = os.path.join("artifacts", "preprocessor.pkl")
 
 class DataTransformation:
     def __init__(self):
         self.data_transformation_config = DataTransformationConfig()
 
-    def get_data_transformer_object(self, numerical_cols, categorical_cols):
-        '''
-        Creates a preprocessing pipeline for numerical and categorical data
-        '''
+    def get_data_transformer_object(self, numerical_features, categorical_features):
         try:
+            # Numerical pipeline
             num_pipeline = Pipeline(steps=[
                 ("imputer", SimpleImputer(strategy="median")),
                 ("scaler", StandardScaler())
             ])
 
+            # Categorical pipeline
             cat_pipeline = Pipeline(steps=[
                 ("imputer", SimpleImputer(strategy="most_frequent")),
-                ("one_hot_encoder", OneHotEncoder(handle_unknown="ignore")),
+                ("onehot", OneHotEncoder(handle_unknown='ignore')),
                 ("scaler", StandardScaler(with_mean=False))
             ])
 
-            logging.info(f"Numerical columns: {numerical_cols}")
-            logging.info(f"Categorical columns: {categorical_cols}")
+            # Combine pipelines
+            preprocessor = ColumnTransformer(transformers=[
+                ("num", num_pipeline, numerical_features),
+                ("cat", cat_pipeline, categorical_features)
+            ])
 
-            preprocessor = ColumnTransformer(
-                transformers=[
-                    ("num", num_pipeline, numerical_cols),
-                    ("cat", cat_pipeline, categorical_cols)
-                ]
-            )
-
+            logging.info("Preprocessor pipeline created successfully.")
             return preprocessor
 
         except Exception as e:
@@ -60,53 +52,55 @@ class DataTransformation:
             train_df = pd.read_csv(train_path)
             test_df = pd.read_csv(test_path)
 
-            logging.info("Train and test data loaded")
+            logging.info("Train and test data loaded.")
 
-            # Target column
-            target_column_name = "Bankruptcy"
+            # ✅ Define selected features (used in model and form)
+            selected_features = [
+                'funding_total_usd', 'funding_rounds',
+                'is_CA', 'is_NY', 'is_MA', 'is_TX',
+                'is_software', 'is_web', 'is_mobile', 'is_biotech',
+                'age_first_funding_year', 'age_last_funding_year',
+                'state_code', 'category_code', 'status'  # include target
+            ]
 
-            # Drop rows with missing target values (if any)
-            train_df.dropna(subset=[target_column_name], inplace=True)
-            test_df.dropna(subset=[target_column_name], inplace=True)
+            # ✅ Keep only selected features
+            train_df = train_df[selected_features]
+            test_df = test_df[selected_features]
+
+            target_column = "status"
+
+            # Identify feature types
+            numerical_features = ['funding_total_usd', 'funding_rounds',
+                                  'is_CA', 'is_NY', 'is_MA', 'is_TX',
+                                  'is_software', 'is_web', 'is_mobile', 'is_biotech',
+                                  'age_first_funding_year', 'age_last_funding_year']
+            categorical_features = ['state_code', 'category_code']
 
             # Split features and target
-            X_train = train_df.drop(columns=[target_column_name])
-            y_train = train_df[target_column_name]
+            X_train = train_df.drop(columns=[target_column])
+            y_train = train_df[target_column]
+            X_test = test_df.drop(columns=[target_column])
+            y_test = test_df[target_column]
 
-            X_test = test_df.drop(columns=[target_column_name])
-            y_test = test_df[target_column_name]
+            # Get preprocessor
+            preprocessing_obj = self.get_data_transformer_object(numerical_features, categorical_features)
 
-            # Identify column types
-            numerical_cols = X_train.select_dtypes(include=['int64', 'float64']).columns.tolist()
-            categorical_cols = X_train.select_dtypes(include=['object']).columns.tolist()
+            # Transform
+            X_train_transformed = preprocessing_obj.fit_transform(X_train)
+            X_test_transformed = preprocessing_obj.transform(X_test)
 
-            preprocessor = self.get_data_transformer_object(numerical_cols, categorical_cols)
+            # Combine transformed features with target
+            train_arr = np.c_[X_train_transformed, y_train.to_numpy()]
+            test_arr = np.c_[X_test_transformed, y_test.to_numpy()]
 
-            # Fit and transform
-            X_train_processed = preprocessor.fit_transform(X_train)
-            X_test_processed = preprocessor.transform(X_test)
-
-            # Ensure target is in correct shape
-            y_train = np.array(y_train).reshape(-1, 1)
-            y_test = np.array(y_test).reshape(-1, 1)
-
-            # Concatenate features and target
-            train_arr = np.c_[X_train_processed, y_train]
-            test_arr = np.c_[X_test_processed, y_test]
-
-            # Save the preprocessor
+            # Save preprocessor object
             save_object(
                 file_path=self.data_transformation_config.preprocessor_obj_file_path,
-                obj=preprocessor
+                obj=preprocessing_obj
             )
 
-            logging.info("Preprocessing complete and object saved.")
-
-            return (
-                train_arr,
-                test_arr,
-                self.data_transformation_config.preprocessor_obj_file_path,
-            )
+            logging.info("Data transformation completed and preprocessor saved.")
+            return train_arr, test_arr, self.data_transformation_config.preprocessor_obj_file_path
 
         except Exception as e:
             raise CustomException(e, sys)

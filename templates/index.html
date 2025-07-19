@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Startup Bankruptcy Prediction</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f2f2f2;
+            padding: 20px;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 800px;
+            margin: auto;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            margin: 6px 0;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        h2 {
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>Startup Bankruptcy Prediction Form</h2>
+    <form action="/predict" method="post">
+        {% for feature in [
+            "funding_total_usd", "funding_rounds", "avg_participants", "relationships", "milestones",
+            "has_angel", "has_VC", "has_roundA", "has_roundB", "has_roundC", "has_roundD",
+            "is_CA", "is_NY", "is_MA", "is_TX", "is_otherstate",
+            "is_software", "is_web", "is_mobile", "is_enterprise", "is_advertising",
+            "is_gamesvideo", "is_ecommerce", "is_consulting", "is_othercategory", "is_top500",
+            "age_first_funding_year", "age_last_funding_year",
+            "age_first_milestone_year", "age_last_milestone_year",
+            "state_code", "category_code"
+        ] %}
+        <label for="{{ feature }}">{{ feature.replace('_', ' ').capitalize() }}</label>
+        <input type="text" name="{{ feature }}" required>
+        {% endfor %}
+        <br>
+        <button type="submit">Predict</button>
+    </form>
+
+    {% if prediction %}
+        <h3 style="text-align: center; margin-top: 20px; color: green;">
+            Prediction: {{ prediction }}
+        </h3>
+    {% endif %}
+</div>
+</body>
+</html>
